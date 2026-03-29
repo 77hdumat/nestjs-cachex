@@ -1,10 +1,4 @@
-**English** | [한국어](./README.ko.md) | [日本語](./README.ja.md)
-
 # nestjs-cachex
-
-[![npm version](https://img.shields.io/npm/v/nestjs-cachex)](https://npmjs.com/package/nestjs-cachex)
-[![license](https://img.shields.io/npm/l/nestjs-cachex)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-blue?logo=typescript&logoColor=white)](https://typescriptlang.org)
 
 A decorator-based caching module for NestJS.
 
@@ -21,14 +15,6 @@ Most caching modules work well as long as the cache is alive. The moment TTL exp
 - **SWR** — Even after TTL expires, the stale data is returned immediately while the cache is refreshed in the background.
 - **Single-flight** — A Redis distributed lock and Pub/Sub ensure that only one refresh runs per key, even across multiple instances.
 - **Multi-level cache** — L1 (in-memory) and L2 (Redis) in a layered structure, eliminating unnecessary network overhead.
-
-| Feature | @nestjs/cache-manager | nestjs-cachex |
-|---|---|---|
-| SWR | ✗ | ✓ |
-| Single-flight | ✗ | ✓ |
-| Distributed lock | ✗ | ✓ |
-| msgpack serialization | ✗ | ✓ |
-| Multi-level cache | ✗ | ✓ |
 
 ---
 
@@ -65,14 +51,6 @@ export class UserService {
 - **Dynamic keys** — Generate keys from a static string or a function per request
 - **Conditional caching** — Fine-grained control with `condition` and `unless`
 - **Full TypeScript support** — Type inference on all options
-
----
-
-## Requirements
-
-- Node.js 18+
-- NestJS 9+
-- Redis 6+ _(optional, for Redis / Multi-level cache)_
 
 ---
 
@@ -248,22 +226,7 @@ async getUser(id: string) { ... }
 
 ### SWR + Single-flight
 
-```
-Request
-   │
-   ├─[Fresh]───────────────────────────────────────────► Return immediately
-   │
-   ├─[Stale]───► Return stale data immediately
-   │              └─ Background:
-   │                  tryLock ──[OK]──► fetch → store → Pub/Sub notify
-   │                           └[fail]─ skip (another instance is handling it)
-   │
-   └─[Miss]────► tryLock ──[OK]──► fetch → store ──────────────────► Return
-                           └[fail]─ Pub/Sub wait
-                                      ├─[notified]──► get cache ───► Return
-                                      └─[timeout]───► polling (exp. backoff)
-                                                        └─[max retries]─► direct fetch
-```
+Fresh cache is returned immediately. Once stale, the existing data is returned right away while a background task acquires a Redis distributed lock and starts revalidation. Instances that fail to acquire the lock wait for a Pub/Sub completion signal, falling back to exponential backoff polling on timeout. If staleTtl also expires, a synchronous refresh is performed before returning.
 
 ### Cache Key Format
 

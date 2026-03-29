@@ -28,6 +28,7 @@ Most caching modules work well as long as the cache is alive. The moment TTL exp
 | Single-flight | ✗ | ✓ |
 | Distributed lock | ✗ | ✓ |
 | msgpack serialization | ✗ | ✓ |
+| zstd compression | ✗ | ✓ |
 | Multi-level cache | ✗ | ✓ |
 
 ---

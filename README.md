@@ -204,6 +204,10 @@ async clearAll() { ... }
 // Evict before method execution
 @CacheEvict({ name: 'users', allEntries: true, beforeInvocation: true })
 async refreshUsers() { ... }
+
+// Debounce eviction — useful when the same key may be invalidated many times in quick succession
+@CacheEvict({ name: 'reports', allEntries: true, debounceMs: 3000 })
+async onDataChanged() { ... }
 ```
 
 ### Combined usage
@@ -242,6 +246,7 @@ async getUser(id: string) { ... }
 | `allEntries` | `boolean` | `false` | Evict entire namespace |
 | `beforeInvocation` | `boolean` | `false` | Evict before method execution |
 | `condition` | `(...args) => boolean` | — | Skip eviction if `false` |
+| `debounceMs` | `number` | — | Collapse bursts: multiple evictions for the same key within this window (ms) are merged into one |
 
 ---
 

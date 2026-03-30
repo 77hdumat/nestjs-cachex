@@ -57,4 +57,17 @@ export interface CacheEvictOption {
    * @default false
    */
   beforeInvocation?: boolean;
+
+  /**
+   * Debounce delay in milliseconds.
+   * Multiple evict calls targeting the same key(s) within this window
+   * are collapsed into a single eviction executed at the end of the window.
+   *
+   * Note: when used with `beforeInvocation: true`, the method runs immediately
+   * but the actual eviction is still deferred by `debounceMs`.
+   *
+   * @default undefined (disabled — eviction is immediate)
+   * @example debounceMs: 3000  // coalesce bursts within 3 seconds
+   */
+  debounceMs?: number;
 }

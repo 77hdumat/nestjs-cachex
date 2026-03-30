@@ -23,6 +23,7 @@ export type CacheEvictContext = {
   keys: string[];
   cacheProvider: CacheProvider;
   allEntries?: boolean;
+  debounceMs?: number;
 };
 
 export type CacheKeyContext = {

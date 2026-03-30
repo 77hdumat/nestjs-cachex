@@ -204,6 +204,10 @@ async clearAll() { ... }
 // メソッド実行前に削除
 @CacheEvict({ name: 'users', allEntries: true, beforeInvocation: true })
 async refreshUsers() { ... }
+
+// debounce削除 — 短時間に同一キーへの無効化リクエストが集中する場合に有効
+@CacheEvict({ name: 'reports', allEntries: true, debounceMs: 3000 })
+async onDataChanged() { ... }
 ```
 
 ### 組み合わせ使用
@@ -242,6 +246,7 @@ async getUser(id: string) { ... }
 | `allEntries` | `boolean` | `false` | ネームスペース全体を削除 |
 | `beforeInvocation` | `boolean` | `false` | メソッド実行前に削除 |
 | `condition` | `(...args) => boolean` | — | `false`なら削除をスキップ |
+| `debounceMs` | `number` | — | 指定した時間（ms）以内の同一キーへの重複削除リクエストを1回にまとめる |
 
 ---
 

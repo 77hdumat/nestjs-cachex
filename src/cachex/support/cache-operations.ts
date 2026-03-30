@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
 import type { CacheModuleConfig, CompressionConfig, SwrConfig } from '../core';
 import {
@@ -18,7 +18,7 @@ interface ResolvedSwrConfig {
 }
 
 @Injectable()
-export class CacheOperations {
+export class CacheOperations implements OnModuleDestroy {
   private readonly logger = new Logger(CacheOperations.name);
 
   private readonly globalSwrConfig: SwrConfig;
@@ -30,6 +30,9 @@ export class CacheOperations {
 
   /** In-process single-flight: collapses concurrent requests for the same key into one Promise. */
   private readonly inflightMap = new Map<string, Promise<unknown>>();
+
+  /** Pending debounce timers for @CacheEvict. Map key: NUL-joined cache keys. */
+  private readonly evictDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   private readonly pubSubTimeoutMs: number;
 
@@ -69,17 +72,43 @@ export class CacheOperations {
   }
 
   async bulkEvict(context: CacheEvictContext): Promise<void> {
-    const { keys, cacheProvider, allEntries = false } = context;
+    const { keys, cacheProvider, allEntries = false, debounceMs } = context;
 
-    try {
-      if (allEntries) {
-        await this.deleteByPatterns(cacheProvider, keys);
-      } else {
-        await this.deleteByKeys(cacheProvider, keys);
+    const doEvict = async () => {
+      try {
+        if (allEntries) {
+          await this.deleteByPatterns(cacheProvider, keys);
+        } else {
+          await this.deleteByKeys(cacheProvider, keys);
+        }
+      } catch (error) {
+        this.logger.error('Cache eviction failed', error);
       }
-    } catch (error) {
-      this.logger.error('Cache eviction failed', error);
+    };
+
+    if (!debounceMs || debounceMs <= 0) {
+      return doEvict();
     }
+
+    // NUL character cannot appear in Redis keys, so it is safe as a separator
+    const timerId = keys.join('\0');
+    const existing = this.evictDebounceTimers.get(timerId);
+    if (existing) clearTimeout(existing);
+
+    this.evictDebounceTimers.set(
+      timerId,
+      setTimeout(() => {
+        this.evictDebounceTimers.delete(timerId);
+        void doEvict();
+      }, debounceMs),
+    );
+  }
+
+  onModuleDestroy(): void {
+    for (const timer of this.evictDebounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.evictDebounceTimers.clear();
   }
 
   /**

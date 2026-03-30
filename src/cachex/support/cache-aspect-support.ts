@@ -57,6 +57,7 @@ export class CacheAspectSupport {
       keys,
       cacheProvider,
       allEntries: option.allEntries,
+      debounceMs: option.debounceMs,
     };
 
     if (option.beforeInvocation) {

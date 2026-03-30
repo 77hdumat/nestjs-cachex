@@ -204,6 +204,10 @@ async clearAll() { ... }
 // 메서드 실행 전 삭제
 @CacheEvict({ name: 'users', allEntries: true, beforeInvocation: true })
 async refreshUsers() { ... }
+
+// debounce 삭제 — 짧은 시간 내 동일 키에 무효화 요청이 폭발적으로 들어올 때 유용
+@CacheEvict({ name: 'reports', allEntries: true, debounceMs: 3000 })
+async onDataChanged() { ... }
 ```
 
 ### 복합 사용
@@ -242,6 +246,7 @@ async getUser(id: string) { ... }
 | `allEntries` | `boolean` | `false` | 네임스페이스 전체 삭제 |
 | `beforeInvocation` | `boolean` | `false` | 메서드 실행 전 삭제 |
 | `condition` | `(...args) => boolean` | — | `false`면 삭제 건너뜀 |
+| `debounceMs` | `number` | — | 지정한 시간(ms) 내 동일 키에 대한 중복 삭제 요청을 하나로 병합 |
 
 ---
 

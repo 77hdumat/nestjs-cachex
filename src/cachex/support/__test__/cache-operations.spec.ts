@@ -257,6 +257,87 @@ describe('CacheOperations', () => {
       await cacheOperations.bulkEvict(context);
       expect(mockCacheProvider.evict).toHaveBeenCalledTimes(1);
     });
+
+    describe('debounceMs', () => {
+      beforeEach(() => jest.useFakeTimers());
+
+      it('should collapse multiple calls within the debounce window into one eviction', async () => {
+        const context: CacheEvictContext = {
+          keys: ['k1'],
+          cacheProvider: mockCacheProvider,
+          debounceMs: 100,
+        };
+
+        void cacheOperations.bulkEvict(context);
+        void cacheOperations.bulkEvict(context);
+        void cacheOperations.bulkEvict(context);
+
+        expect(mockCacheProvider.evict).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(100);
+        await Promise.resolve(); // flush microtasks
+
+        expect(mockCacheProvider.evict).toHaveBeenCalledTimes(1);
+      });
+
+      it('should evict immediately when debounceMs is not set', async () => {
+        const context: CacheEvictContext = { keys: ['k1'], cacheProvider: mockCacheProvider };
+        await cacheOperations.bulkEvict(context);
+        expect(mockCacheProvider.evict).toHaveBeenCalledTimes(1);
+      });
+
+      it('should debounce independently for different key sets', async () => {
+        void cacheOperations.bulkEvict({
+          keys: ['k1'],
+          cacheProvider: mockCacheProvider,
+          debounceMs: 100,
+        });
+        void cacheOperations.bulkEvict({
+          keys: ['k2'],
+          cacheProvider: mockCacheProvider,
+          debounceMs: 100,
+        });
+
+        jest.advanceTimersByTime(100);
+        await Promise.resolve();
+
+        expect(mockCacheProvider.evict).toHaveBeenCalledTimes(2);
+      });
+
+      it('should reset the timer when called again within the window', async () => {
+        const context: CacheEvictContext = {
+          keys: ['k1'],
+          cacheProvider: mockCacheProvider,
+          debounceMs: 100,
+        };
+
+        void cacheOperations.bulkEvict(context);
+        jest.advanceTimersByTime(50);
+        void cacheOperations.bulkEvict(context); // resets timer
+
+        jest.advanceTimersByTime(50); // 100ms total elapsed, but timer was reset at 50ms
+        expect(mockCacheProvider.evict).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(50); // 50ms after reset — timer fires now
+        await Promise.resolve();
+
+        expect(mockCacheProvider.evict).toHaveBeenCalledTimes(1);
+      });
+
+      it('should clear pending timers on module destroy without executing eviction', () => {
+        const context: CacheEvictContext = {
+          keys: ['k1'],
+          cacheProvider: mockCacheProvider,
+          debounceMs: 100,
+        };
+        void cacheOperations.bulkEvict(context);
+
+        cacheOperations.onModuleDestroy();
+        jest.advanceTimersByTime(200);
+
+        expect(mockCacheProvider.evict).not.toHaveBeenCalled();
+      });
+    });
   });
 
   it('should increase the wait time exponentially with each retry attempt', async () => {

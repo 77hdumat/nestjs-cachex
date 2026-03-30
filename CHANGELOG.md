@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/77hdumat/nestjs-cachex/compare/v1.1.0...v1.1.1) (2026-03-30)
+
+
+### Bug Fixes
+
+*  package.json의 main/types가 존재하지 않는 dist/cachex/index.*를 가리키고 있는 문제 조치 ([ab4a605](https://github.com/77hdumat/nestjs-cachex/commit/ab4a6054f51b21e291a82a9c7a7d5aea4df49fd8))
+
 # [1.1.0](https://github.com/77hdumat/nestjs-cachex/compare/v1.0.0...v1.1.0) (2026-03-30)
 
 

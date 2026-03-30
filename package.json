@@ -1,7 +1,15 @@
 {
-  "name": "nestjs-swr-cache",
+  "name": "nestjs-cachex",
   "version": "0.0.1",
   "description": "NestJS decorator-based caching module with SWR, Single-flight, msgpack, zstd, and multi-level cache",
+  "main": "dist/cachex/index.js",
+  "types": "dist/cachex/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "keywords": [
     "nestjs",
     "cache",
@@ -20,8 +28,7 @@
     "cache-stampede"
   ],
   "author": "",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -53,9 +60,14 @@
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
-    "ioredis": "^5.4.1",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/npm": "^12",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
@@ -66,8 +78,10 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^16.0.0",
+    "ioredis": "^5.4.1",
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
+    "semantic-release": "^25.0.3",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

@@ -26,14 +26,12 @@ const COMMON_PROVIDERS: Provider[] = [
 ];
 
 @Module({})
-export class SwrCacheModule {
-  /**
-   * 동기 설정으로 모듈을 등록합니다
-   */
+export class CacheXModule {
+  /** Registers the module with synchronous configuration. */
   static forRoot(config: CacheModuleConfig): DynamicModule {
     return {
       global: true,
-      module: SwrCacheModule,
+      module: CacheXModule,
       imports: [AopModule],
       providers: [
         {
@@ -45,9 +43,7 @@ export class SwrCacheModule {
     };
   }
 
-  /**
-   * 비동기 설정으로 모듈을 등록합니다
-   */
+  /** Registers the module with asynchronous configuration. */
   static forRootAsync(options: CacheModuleAsyncConfig): DynamicModule {
     const providers: Provider[] = [
       {
@@ -58,7 +54,7 @@ export class SwrCacheModule {
       ...COMMON_PROVIDERS,
     ];
 
-    // Redis Token Bridge
+    // Bridge external Redis client token to the internal injection token
     if (options.redisToken) {
       providers.push({
         provide: SWR_REDIS_CLIENT,
@@ -66,7 +62,7 @@ export class SwrCacheModule {
       });
     }
 
-    // Redis Subscriber Token Bridge (Pub/Sub 싱글플라이트용 전용 커넥션)
+    // Bridge external subscriber token (dedicated connection required for SUBSCRIBE mode)
     if (options.subscriberToken) {
       providers.push({
         provide: SWR_REDIS_SUBSCRIBER,
@@ -76,7 +72,7 @@ export class SwrCacheModule {
 
     return {
       global: true,
-      module: SwrCacheModule,
+      module: CacheXModule,
       imports: [AopModule, ...(options.imports ?? [])],
       providers,
     };

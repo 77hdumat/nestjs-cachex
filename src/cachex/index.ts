@@ -1,4 +1,4 @@
-export { SwrCacheModule } from './swr-cache.module';
+export { CacheXModule } from './cachex.module';
 
 export { CacheEvict, Cacheable } from './cache.decorators';
 

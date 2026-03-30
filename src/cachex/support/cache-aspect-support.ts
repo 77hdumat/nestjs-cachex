@@ -24,7 +24,6 @@ export class CacheAspectSupport {
   async executeCacheable(option: CacheableOption, params: CacheOperationContext): Promise<any> {
     const { method, instance, methodName, args } = params;
 
-    // condition 체크 (사전 조건)
     if (option.condition && !option.condition(...args)) {
       return method(...args);
     }
@@ -46,7 +45,6 @@ export class CacheAspectSupport {
   async executeCacheEvict(option: CacheEvictOption, params: CacheOperationContext): Promise<any> {
     const { method, instance, methodName, args } = params;
 
-    // condition 체크 (사전 조건)
     if (option.condition && !option.condition(...args)) {
       return method(...args);
     }
@@ -61,13 +59,11 @@ export class CacheAspectSupport {
       allEntries: option.allEntries,
     };
 
-    // 메서드 실행 전 캐시 삭제
     if (option.beforeInvocation) {
       await this.cacheOperations.bulkEvict(context);
       return method(...args);
     }
 
-    // 메서드 실행 후 캐시 삭제
     const result = await method(...args);
     await this.cacheOperations.bulkEvict(context);
     return result;

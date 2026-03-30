@@ -108,7 +108,7 @@ export class InMemoryCache implements CacheProvider {
         this.memory.set(key, data);
       }
     } catch (e) {
-      this.logger.warn(`캐시 수정 실패`, e);
+      this.logger.warn(`Failed to write cache entry`, e);
     }
   }
 
@@ -117,7 +117,7 @@ export class InMemoryCache implements CacheProvider {
       this.memory.clear();
       this.activeLocks.clear();
     } catch (e) {
-      this.logger.warn(`캐시 초기화 실패`, e);
+      this.logger.warn(`Failed to clear cache`, e);
     }
     return Promise.resolve();
   }
@@ -126,7 +126,7 @@ export class InMemoryCache implements CacheProvider {
     try {
       this.memory.delete(key);
     } catch (e) {
-      this.logger.warn(`캐시 삭제`, e);
+      this.logger.warn(`Failed to evict cache entry`, e);
     }
     return Promise.resolve();
   }
@@ -134,7 +134,7 @@ export class InMemoryCache implements CacheProvider {
   async waitForResult(key: string, timeoutMs: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error(`Pub/Sub 타임아웃 (키: ${key}, ${timeoutMs}ms)`));
+        reject(new Error(`Pub/Sub timeout (key: ${key}, ${timeoutMs}ms)`));
       }, timeoutMs);
 
       this.eventEmitter.once(`pending:${key}`, () => {
@@ -151,18 +151,17 @@ export class InMemoryCache implements CacheProvider {
 
   clearKeysByPattern(pattern: string): Promise<void> {
     try {
-      const regex = new RegExp(pattern);
       const keysToDelete: string[] = [];
 
       for (const key of this.memory.keys()) {
-        if (regex.test(key)) {
+        if (key.startsWith(pattern)) {
           keysToDelete.push(key);
         }
       }
 
       keysToDelete.forEach((key) => this.memory.delete(key));
     } catch (e) {
-      this.logger.warn(`캐시 패턴 삭제 실패`, e);
+      this.logger.warn(`Failed to delete cache entries by pattern`, e);
     }
     return Promise.resolve();
   }

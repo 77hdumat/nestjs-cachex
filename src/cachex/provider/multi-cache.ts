@@ -45,26 +45,24 @@ export class MultiCache implements CacheProvider {
   }
 
   async get<T>(key: string): Promise<T | null> {
-    // L1
     try {
       const l1Value = await this.l1Cache.get<T>(key);
       if (l1Value !== null) {
         return l1Value;
       }
     } catch (error) {
-      this.logger.warn('L1 캐시 조회 실패', error);
+      this.logger.warn('L1 cache read failed', error);
     }
 
-    // L2
     try {
       const l2Value = await this.l2Cache.get<T>(key);
-      if (l2Value) {
-        // L2 (Write-back)
+      if (l2Value !== null) {
+        // write-back to L1
         await this.l1Cache.put(key, l2Value, this.l1WriteBackTtl).catch(() => {});
         return l2Value;
       }
     } catch (error) {
-      this.logger.warn('L2 캐시 조회 실패', error);
+      this.logger.warn('L2 cache read failed', error);
     }
 
     return null;
@@ -85,11 +83,11 @@ export class MultiCache implements CacheProvider {
     ]);
 
     if (l2Result.status === 'rejected') {
-      // L2 실패 시 L1도 롤백하여 서버 간 불일치 방지
+      // roll back L1 on L2 failure to prevent cross-server inconsistency
       await this.l1Cache.evict(key).catch(() => {});
-      this.logger.warn(`멀티 캐시 L2 저장 실패, L1 롤백 (키: ${key})`);
+      this.logger.warn(`Multi-cache L2 write failed, rolled back L1 (key: ${key})`);
     } else if (l1Result.status === 'rejected') {
-      this.logger.warn(`멀티 캐시 L1 저장 실패 (키: ${key})`);
+      this.logger.warn(`Multi-cache L1 write failed (key: ${key})`);
     }
   }
 
@@ -110,7 +108,7 @@ export class MultiCache implements CacheProvider {
 
   async waitForResult(key: string, timeoutMs: number): Promise<void> {
     if (!this.l2Cache.waitForResult) {
-      return Promise.reject(new Error('L2 캐시가 waitForResult를 지원하지 않습니다'));
+      return Promise.reject(new Error('L2 cache does not support waitForResult'));
     }
     return this.l2Cache.waitForResult(key, timeoutMs);
   }

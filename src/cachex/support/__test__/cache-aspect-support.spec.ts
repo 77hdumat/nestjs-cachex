@@ -55,24 +55,21 @@ describe('CacheAspectSupport', () => {
   });
 
   describe('executeCacheable', () => {
-    it('condition 조건이 false면 캐시 로직을 건너뛰고 원본 메서드를 실행해야 한다', async () => {
-      // Arrange
+    it('should skip cache logic and call the original method when condition returns false', async () => {
       const option: CacheableOption = {
         ttl: 60,
         condition: (arg) => arg === 'valid',
       };
       const params = createParams('test', ['invalid']);
 
-      // Act
       const result = await aspectSupport.executeCacheable(option, params);
 
-      // Assert
       expect(result).toBe('original-result');
       expect(params.method).toHaveBeenCalledWith('invalid');
       expect(mockCacheOperations.getWithSwr).not.toHaveBeenCalled();
     });
 
-    it('condition 조건이 true면 캐시 오퍼레이션을 실행해야 한다', async () => {
+    it('should execute cache operations when condition returns true', async () => {
       const option: CacheableOption = {
         ttl: 60,
         condition: (arg) => arg === 'valid',
@@ -85,7 +82,7 @@ describe('CacheAspectSupport', () => {
       expect(mockCacheOperations.getWithSwr).toHaveBeenCalled();
     });
 
-    it('CacheKeyGenerator.generateCacheableKey를 호출하여 키를 생성해야 한다', async () => {
+    it('should generate a key using CacheKeyGenerator.generateCacheableKey', async () => {
       const option: CacheableOption = { ttl: 60 };
       const params = createParams();
 
@@ -105,7 +102,7 @@ describe('CacheAspectSupport', () => {
       );
     });
 
-    it('지정된 CacheManager를 Resolver에서 가져와야 한다', async () => {
+    it('should resolve the specified CacheManager from CacheResolver', async () => {
       const option: CacheableOption = {
         ttl: 60,
         cacheManager: CacheManager.REDIS,
@@ -123,7 +120,7 @@ describe('CacheAspectSupport', () => {
   });
 
   describe('executeCacheEvict', () => {
-    it('condition 조건이 false면 삭제 로직을 건너뛰어야 한다', async () => {
+    it('should skip eviction when condition returns false', async () => {
       const option: CacheEvictOption = {
         condition: () => false,
       };
@@ -135,18 +132,18 @@ describe('CacheAspectSupport', () => {
       expect(mockCacheOperations.bulkEvict).not.toHaveBeenCalled();
     });
 
-    it('원본 메서드 실행 후에 캐시를 삭제해야 한다', async () => {
+    it('should evict the cache after the original method executes', async () => {
       const option: CacheEvictOption = {};
       const params = createParams();
 
       await aspectSupport.executeCacheEvict(option, params);
 
-      // 순서 검증: 메서드 호출 -> 삭제
+      // verify order: method call → eviction
       expect(params.method).toHaveBeenCalled();
       expect(mockCacheOperations.bulkEvict).toHaveBeenCalled();
     });
 
-    it('CacheKeyGenerator.generateEvictKeys를 호출하여 키를 생성해야 한다', async () => {
+    it('should generate keys using CacheKeyGenerator.generateEvictKeys', async () => {
       const option: CacheEvictOption = {
         name: 'users',
       };
@@ -170,13 +167,13 @@ describe('CacheAspectSupport', () => {
       );
     });
 
-    it('beforeInvocation이 true면 원본 메서드 실행 전에 삭제해야 한다', async () => {
+    it('should evict before the original method executes when beforeInvocation is true', async () => {
       const option: CacheEvictOption = {
         beforeInvocation: true,
       };
       const params = createParams();
 
-      // 실행 순서를 확인하기 위해 mock 구현 변경
+      // override mock implementations to capture execution order
       const executionOrder: string[] = [];
       mockCacheOperations.bulkEvict.mockImplementation(async () => {
         executionOrder.push('evict');
@@ -192,7 +189,7 @@ describe('CacheAspectSupport', () => {
       expect(executionOrder).toEqual(['evict', 'method']);
     });
 
-    it('allEntries 옵션이 context에 전달되어야 한다', async () => {
+    it('should pass the allEntries option in the evict context', async () => {
       const option: CacheEvictOption = {
         name: 'products',
         allEntries: true,

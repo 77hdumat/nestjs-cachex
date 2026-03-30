@@ -79,7 +79,7 @@ export class RedisCache implements CacheProvider {
         return value as unknown as T;
       }
     } catch (e) {
-      this.logger.warn(`Redis get error: ${e.message}`);
+      this.logger.warn(`Redis get failed (key: ${key}): ${e.message}`);
       return null;
     }
   }
@@ -104,7 +104,7 @@ export class RedisCache implements CacheProvider {
         await this.redis.set(key, data);
       }
     } catch (e) {
-      this.logger.warn(`캐시 수정 실패`, e);
+      this.logger.warn(`Failed to write cache entry`, e);
     }
   }
 
@@ -116,7 +116,7 @@ export class RedisCache implements CacheProvider {
     try {
       await this.clearKeysByPattern('*');
     } catch (e) {
-      this.logger.warn(`캐시 초기화 실패`, e);
+      this.logger.warn(`Failed to clear cache`, e);
     }
   }
 
@@ -128,20 +128,19 @@ export class RedisCache implements CacheProvider {
     try {
       await this.redis.del(key);
     } catch (e) {
-      this.logger.warn(`캐시 삭제 실패`, e);
+      this.logger.warn(`Failed to evict cache entry`, e);
     }
   }
 
   async waitForResult(key: string, timeoutMs: number): Promise<void> {
     if (!this.subscriber) {
-      return Promise.reject(new Error('subscriber 커넥션이 설정되지 않았습니다'));
+      return Promise.reject(new Error('No subscriber connection configured'));
     }
 
     const channel = `pending:${key}`;
 
     return new Promise<void>((resolve, reject) => {
-      // handler와 timer가 서로를 참조하는 순환 클로저.
-      // ref 객체를 사용해 const 선언을 유지하면서 나중에 timer를 할당 가능하도록 함
+      // timerRef allows the const handler closure to reference the timer set after its own declaration
       const timerRef: { current: ReturnType<typeof setTimeout> | undefined } = {
         current: undefined,
       };
@@ -158,7 +157,7 @@ export class RedisCache implements CacheProvider {
       timerRef.current = setTimeout(() => {
         this.subscriber!.off('message', handler);
         this.subscriber!.unsubscribe(channel).catch(() => {});
-        reject(new Error(`Pub/Sub 타임아웃 (키: ${key}, ${timeoutMs}ms)`));
+        reject(new Error(`Pub/Sub timeout (key: ${key}, ${timeoutMs}ms)`));
       }, timeoutMs);
 
       this.subscriber!.on('message', handler);
@@ -177,7 +176,7 @@ export class RedisCache implements CacheProvider {
     try {
       await this.redis.publish(`pending:${key}`, '1');
     } catch (err) {
-      this.logger.debug(`Pub/Sub 알림 실패 (키: ${key})`, err);
+      this.logger.debug(`Pub/Sub notify failed (key: ${key})`, err);
     }
   }
 
@@ -190,24 +189,26 @@ export class RedisCache implements CacheProvider {
     try {
       await this.scanAndDelete(redis, '0', pattern, 100);
     } catch {
-      this.logger.warn(`캐시 패턴 삭제 실패`);
+      this.logger.warn(`Failed to delete cache entries by pattern`);
     }
   }
 
   private async scanAndDelete(
     redis: RedisLike,
-    cursor: string,
+    _cursor: string,
     pattern: string,
     batchSize: number,
   ): Promise<void> {
-    const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${pattern}*`, 'COUNT', batchSize);
+    let cursor = _cursor;
 
-    if (keys.length > 0) {
-      await Promise.all(keys.map((key) => redis.unlink(key)));
-    }
-    
-    if (nextCursor !== '0') {
-      await this.scanAndDelete(redis, nextCursor, pattern, batchSize);
-    }
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${pattern}*`, 'COUNT', batchSize);
+
+      if (keys.length > 0) {
+        await Promise.all(keys.map((key) => redis.unlink(key)));
+      }
+
+      cursor = nextCursor;
+    } while (cursor !== '0');
   }
 }

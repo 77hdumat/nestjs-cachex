@@ -100,11 +100,11 @@ npm install ioredis
 #### 静的登録
 
 ```typescript
-import { SwrCacheModule, CacheManager } from 'nestjs-cachex';
+import { CacheXModule, CacheManager } from 'nestjs-cachex';
 
 @Module({
   imports: [
-    SwrCacheModule.forRoot({
+    CacheXModule.forRoot({
       defaults: {
         ttl: 300,
         cacheManager: CacheManager.REDIS,
@@ -118,7 +118,7 @@ export class AppModule {}
 #### 動的登録
 
 ```typescript
-SwrCacheModule.forRootAsync({
+CacheXModule.forRootAsync({
   imports: [ConfigModule],
   inject: [ConfigService],
   redisToken: REDIS_CLIENT,

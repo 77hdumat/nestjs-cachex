@@ -38,16 +38,13 @@ export type CacheOperationContext = {
   args: any[];
 };
 
-/**
- * 캐시 설정 값 정의
- */
 export const CACHE_MODULE_CONFIG = 'CACHE_MODULE_CONFIG';
 export const SWR_REDIS_CLIENT = Symbol('SWR_REDIS_CLIENT');
 export const SWR_REDIS_SUBSCRIBER = Symbol('SWR_REDIS_SUBSCRIBER');
 
 /**
- * Redis 클라이언트 인터페이스
- * ioredis, redis 등 어떤 클라이언트든 이 인터페이스를 구현하면 사용 가능
+ * Minimal Redis client interface.
+ * Compatible with ioredis, node-redis, or any client implementing these methods.
  */
 export interface RedisLike {
   ping(): Promise<string>;
@@ -60,16 +57,16 @@ export interface RedisLike {
   ): Promise<[cursor: string, keys: string[]]>;
   unlink(...keys: string[]): Promise<number>;
   /**
-   * Pub/Sub 알림 발행 (선택적 — 없으면 notifyResult는 no-op)
-   * SUBSCRIBE 모드가 아닌 일반 커넥션에서 호출
+   * Publishes a message to a channel (optional).
+   * Required for Pub/Sub single-flight. notifyResult is a no-op when absent.
    */
   publish?(channel: string, message: string): Promise<number>;
 }
 
 /**
- * Redis Subscriber 커넥션 인터페이스
- * ioredis는 SUBSCRIBE 실행 시 해당 커넥션이 구독 전용 모드로 전환되므로
- * 일반 명령(GET/SET 등)을 실행할 수 없음 — 반드시 별도 커넥션 사용
+ * Dedicated Redis subscriber connection interface.
+ * ioredis enters subscribe-only mode after SUBSCRIBE, blocking regular commands —
+ * a separate connection must be provided.
  */
 export interface RedisSubscriberLike {
   subscribe(channel: string): Promise<void>;
@@ -78,70 +75,49 @@ export interface RedisSubscriberLike {
   off(event: 'message', listener: (channel: string, message: string) => void): this;
 }
 
-/**
- * SWR 설정
- */
 export interface SwrConfig {
   /**
-   * SWR 활성화 여부
+   * Enables stale-while-revalidate.
    * @default true
    */
   enabled?: boolean;
 
   /**
-   * staleTtl 미설정 시 ttl에 곱할 기본 배수
-   * physicalTtl = ttl + (ttl * defaultStaleMultiplier)
+   * Multiplier applied to ttl when staleTtl is not explicitly set.
+   * physicalTtl = ttl + ttl * defaultStaleMultiplier
    * @default 5
-   * @example defaultStaleMultiplier: 5 // ttl: 60 → staleTtl: 300, physicalTtl: 360
    */
   defaultStaleMultiplier?: number;
 
   /**
-   * Pub/Sub 대기 타임아웃 (ms)
-   * 락 실패 시 Redis SUBSCRIBE로 결과를 기다리는 최대 시간
-   * 타임아웃 초과 시 폴링 방식으로 폴백
+   * Maximum time in ms to wait for a Pub/Sub cache-ready event before falling back to polling.
    * @default 2000
    */
   pubSubTimeoutMs?: number;
 }
 
-/**
- * 압축 설정
- */
 export interface CompressionConfig {
   enabled?: boolean;
   threshold?: number;
   level?: number;
 }
 
-/**
- * MultiCache L1/L2 설정
- */
 export interface MultiCacheConfig {
   l1MaxTtl?: number;
   l2DefaultTtl?: number;
   writeBackTtl?: number;
 }
 
-/**
- * 메모리 캐시 설정
- */
 export interface MemoryCacheConfig {
   max?: number;
   ttl?: number;
 }
 
-/**
- * 글로벌 기본값 설정
- */
 export interface DefaultsConfig {
   ttl?: number;
   cacheManager?: CacheManager;
 }
 
-/**
- * 기본값 상수
- */
 export const DEFAULT_CONFIG = {
   memory: {
     max: 1000,
@@ -179,9 +155,9 @@ export interface CacheModuleConfig {
 export interface CacheModuleAsyncConfig extends Pick<ModuleMetadata, 'imports'> {
   redisToken?: InjectionToken;
   /**
-   * Redis SUBSCRIBE 전용 커넥션 토큰
-   * ioredis는 SUBSCRIBE 후 일반 명령 불가 — 반드시 별도 커넥션 제공
-   * 미설정 시 pub/sub 비활성화, 기존 폴링 방식으로 동작
+   * Dedicated Redis connection for SUBSCRIBE.
+   * ioredis cannot run regular commands after SUBSCRIBE — provide a separate connection.
+   * When omitted, Pub/Sub is disabled and polling is used instead.
    * @example
    * subscriberToken: REDIS_SUBSCRIBER // { provide: REDIS_SUBSCRIBER, useFactory: () => new Redis() }
    */

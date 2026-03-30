@@ -12,9 +12,6 @@ import {
 } from '../core';
 import { sleep } from '../util';
 
-/**
- * 런타임에 사용될 병합된 SWR 설정
- */
 interface ResolvedSwrConfig {
   enabled: boolean;
   defaultStaleMultiplier: number;
@@ -28,14 +25,10 @@ export class CacheOperations {
   private readonly globalDefaultTtl: number | undefined;
   private readonly globalCompressionConfig: CompressionConfig;
 
-  /**
-   * 백그라운드 갱신이 예약된 키 추적 (중복 스케줄 방지)
-   */
+  /** Tracks keys with a scheduled background refresh to prevent duplicate revalidations. */
   private readonly refreshingKeys = new Set<string>();
 
-  /**
-   * 인-프로세스 싱글플라이트: 같은 서버 내 동일 키에 대한 중복 요청을 단일 Promise로 병합
-   */
+  /** In-process single-flight: collapses concurrent requests for the same key into one Promise. */
   private readonly inflightMap = new Map<string, Promise<unknown>>();
 
   private readonly pubSubTimeoutMs: number;
@@ -47,14 +40,10 @@ export class CacheOperations {
     this.pubSubTimeoutMs = config?.swr?.pubSubTimeoutMs ?? DEFAULT_CONFIG.swr.pubSubTimeoutMs;
   }
 
-  /**
-   * SWR 전략으로 캐시를 조회합니다
-   */
   async getWithSwr(context: CacheableContext, option: CacheableOption): Promise<unknown> {
     const { key, cacheProvider } = context;
     const swrConfig = this.resolveSwrConfig(option);
 
-    // SWR 비활성화 시 단순 캐시 로직
     if (!swrConfig.enabled) {
       return this.getWithSimpleCache(context, option);
     }
@@ -65,7 +54,7 @@ export class CacheOperations {
       const cached = await cacheProvider.get<unknown>(key);
       envelope = CacheEnvelope.fromObject(cached);
     } catch (error) {
-      this.logger.debug(`캐시 조회 실패 (키: ${key}). 갱신 시도.`, error);
+      this.logger.debug(`Cache read failed (key: ${key}), will revalidate`, error);
     }
 
     if (!envelope) {
@@ -74,15 +63,11 @@ export class CacheOperations {
 
     if (envelope.isStale()) {
       this.scheduleBackgroundRefresh(context, option, swrConfig);
-      return envelope.data;
     }
 
     return envelope.data;
   }
 
-  /**
-   * 캐시를 삭제합니다
-   */
   async bulkEvict(context: CacheEvictContext): Promise<void> {
     const { keys, cacheProvider, allEntries = false } = context;
 
@@ -93,13 +78,13 @@ export class CacheOperations {
         await this.deleteByKeys(cacheProvider, keys);
       }
     } catch (error) {
-      this.logger.error('캐시 삭제 실패', error);
+      this.logger.error('Cache eviction failed', error);
     }
   }
 
   /**
-   * 데코레이터 옵션과 글로벌 설정을 병합합니다
-   * 우선순위: @Cacheable({ swr }) > forRootAsync({ swr.enabled })
+   * Merges decorator-level and global SWR config.
+   * Priority: @Cacheable({ swr }) > forRootAsync({ swr.enabled })
    */
   private resolveSwrConfig(option?: CacheableOption): ResolvedSwrConfig {
     const enabled: boolean =
@@ -113,31 +98,26 @@ export class CacheOperations {
     return { enabled, defaultStaleMultiplier };
   }
 
-  /**
-   * TTL을 해석합니다 (데코레이터 → 글로벌 fallback)
-   */
+  /** Resolves TTL with decorator-level taking priority over global defaults. */
   private resolveTtl(option: CacheableOption): number {
     const ttl = option.ttl ?? this.globalDefaultTtl;
     if (ttl === undefined) {
       throw new Error(
-        'TTL이 설정되지 않았습니다. 데코레이터 또는 글로벌 defaults.ttl을 설정해주세요.',
+        'TTL is not configured. Set ttl on the decorator or configure defaults.ttl at the module level.',
       );
     }
     return ttl;
   }
 
-  /**
-   * staleTtl을 계산합니다
-   * 우선순위: option.staleTtl > ttl * defaultStaleMultiplier
-   */
+  /** staleTtl = option.staleTtl ?? ttl * defaultStaleMultiplier */
   private resolveStaleTtl(option: CacheableOption, multiplier: number): number {
     const ttl = this.resolveTtl(option);
     return option.staleTtl ?? ttl * multiplier;
   }
 
   /**
-   * 압축 설정을 해석합니다 (데코레이터 → 글로벌 fallback)
-   * 우선순위: @Cacheable({ compression }) > forRootAsync({ compression })
+   * Resolves compression config for a specific call.
+   * Priority: @Cacheable({ compression }) > module-level compression
    */
   private resolveCompressionOverride(option: CacheableOption): CompressionConfig | undefined {
     if (option.compression === undefined) {
@@ -152,9 +132,7 @@ export class CacheOperations {
     return { ...this.globalCompressionConfig, ...option.compression, enabled: true };
   }
 
-  /**
-   * SWR 비활성화 시 단순 캐시 로직
-   */
+  /** Simple cache path used when SWR is disabled. */
   private async getWithSimpleCache(
     context: CacheableContext,
     option: CacheableOption,
@@ -168,7 +146,7 @@ export class CacheOperations {
         return cached;
       }
     } catch (error) {
-      this.logger.debug(`캐시 조회 실패 (키: ${key})`, error);
+      this.logger.debug(`Cache read failed (key: ${key})`, error);
     }
 
     const result = await method(...args);
@@ -181,15 +159,15 @@ export class CacheOperations {
     try {
       await cacheProvider.put(key, result, ttl, compressionOverride);
     } catch (error) {
-      this.logger.warn(`캐시 저장 실패 (키: ${key})`, error);
+      this.logger.warn(`Failed to write cache entry (key: ${key})`, error);
     }
 
     return result;
   }
 
   /**
-   * 캐시 미스 발생 시 인-프로세스 중복 방지 후 분산 락/Pub/Sub으로 처리합니다
-   * inflightMap으로 같은 서버 내 동일 키 요청을 단일 Promise로 병합합니다
+   * Deduplicates concurrent in-process cache misses for the same key into a single Promise,
+   * then delegates to the distributed lock + Pub/Sub flow.
    */
   private handleCacheMissWithLock(
     context: CacheableContext,
@@ -210,13 +188,13 @@ export class CacheOperations {
   }
 
   /**
-   * 분산 락 획득 후 캐시를 갱신하거나, 락 실패 시 Pub/Sub 또는 폴링으로 결과를 기다립니다
+   * Acquires a distributed lock and refreshes the cache, or waits for another server to do it.
    *
-   * 처리 순서:
-   * 1. tryLock 성공 → renewCache + notifyResult (다른 서버에 PUBLISH)
-   * 2. tryLock 실패 + waitForResult 있음 → SUBSCRIBE 대기 → 캐시 조회
-   * 3. 타임아웃 또는 waitForResult 없음 → 지수 백오프 폴링
-   * 4. 최후 수단 → 원본 메서드 직접 호출
+   * Flow:
+   * 1. tryLock success  → renewCache + notifyResult (PUBLISH to waiting servers)
+   * 2. tryLock failure + waitForResult available → SUBSCRIBE and wait → read cache
+   * 3. Pub/Sub timeout or unavailable → exponential-backoff polling
+   * 4. Last resort → call the original method directly
    */
   private async fetchWithLockAndPubSub(
     context: CacheableContext,
@@ -229,7 +207,7 @@ export class CacheOperations {
 
     if (lockAcquired) {
       try {
-        // 더블 체크: 락 대기 중 다른 프로세스가 이미 캐시를 생성했을 수 있음
+        // Double-check: another process may have populated the cache while we waited for the lock
         const cached = await this.getCacheEnvelope(key, cacheProvider);
         if (cached) {
           return cached.data;
@@ -237,7 +215,6 @@ export class CacheOperations {
 
         const result = await this.renewCache(context, option, swrConfig);
 
-        // 대기 중인 다른 서버에 갱신 완료 알림
         void cacheProvider.notifyResult?.(key);
 
         return result;
@@ -246,7 +223,7 @@ export class CacheOperations {
       }
     }
 
-    // 락 획득 실패 — Pub/Sub으로 갱신 완료 이벤트 대기
+    // Lock not acquired — subscribe to the cache-ready event published by the lock holder
     if (cacheProvider.waitForResult) {
       try {
         await cacheProvider.waitForResult(key, this.pubSubTimeoutMs);
@@ -255,11 +232,11 @@ export class CacheOperations {
           return cached.data;
         }
       } catch {
-        this.logger.debug(`Pub/Sub 대기 실패, 폴링으로 폴백 (키: ${key})`);
+        this.logger.debug(`Pub/Sub wait failed, falling back to polling (key: ${key})`);
       }
     }
 
-    // 폴링 폴백: 지수 백오프로 캐시 재조회
+    // Polling fallback with exponential backoff
     const { maxAttempts } = DEFAULT_CONFIG.swr;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       // eslint-disable-next-line no-await-in-loop
@@ -271,13 +248,13 @@ export class CacheOperations {
       }
     }
 
-    // 최후 수단: 원본 메서드 직접 호출
+    // Last resort: call the original method directly
     return method(...args);
   }
 
   /**
-   * 논리적으로 만료된 캐시를 백그라운드에서 갱신하도록 스케줄링합니다
-   * 동시에 들어온 여러 요청이 중복으로 스케줄하지 않도록 Set으로 추적합니다
+   * Schedules a background cache refresh for a stale entry.
+   * Uses refreshingKeys to prevent duplicate refresh tasks for the same key.
    */
   private scheduleBackgroundRefresh(
     context: CacheableContext,
@@ -295,7 +272,7 @@ export class CacheOperations {
     setImmediate(() => {
       this.backgroundRefresh(context, option, swrConfig)
         .catch((error) => {
-          this.logger.error(`백그라운드 캐시 갱신 실패 (키: ${key})`, error);
+          this.logger.error(`Background cache refresh failed (key: ${key})`, error);
         })
         .finally(() => {
           this.refreshingKeys.delete(key);
@@ -303,9 +280,6 @@ export class CacheOperations {
     });
   }
 
-  /**
-   * 백그라운드에서 캐시를 갱신합니다
-   */
   private async backgroundRefresh(
     context: CacheableContext,
     option: CacheableOption,
@@ -333,9 +307,7 @@ export class CacheOperations {
     }
   }
 
-  /**
-   * 원본 메서드를 실행하고 결과를 캐시에 저장합니다
-   */
+  /** Executes the original method and writes the result to the cache. */
   private async renewCache(
     context: CacheableContext,
     option: CacheableOption,
@@ -358,30 +330,23 @@ export class CacheOperations {
 
       await cacheProvider.put(key, envelope.toObject(), physicalTtl, compressionOverride);
     } catch (error) {
-      this.logger.warn(`캐시 저장 실패 (키: ${key})`, error);
+      this.logger.warn(`Failed to write cache entry (key: ${key})`, error);
     }
 
     return result;
   }
 
-  /**
-   * 패턴으로 캐시를 삭제합니다
-   */
   private async deleteByPatterns(cacheProvider: CacheProvider, patterns: string[]): Promise<void> {
     await Promise.all(patterns.map((pattern) => cacheProvider.clearKeysByPattern(pattern)));
   }
 
-  /**
-   * 키로 캐시를 삭제합니다
-   */
   private async deleteByKeys(cacheProvider: CacheProvider, keys: string[]): Promise<void> {
     await Promise.all(keys.map((key) => cacheProvider.evict(key)));
   }
 
   /**
-   * 물리적 TTL을 계산합니다
    * physicalTtl = ttl + staleTtl + jitter
-   * jitter는 Redis 동시 만료 분산 목적으로 물리 TTL에만 적용합니다
+   * Jitter is applied only to the physical TTL to spread Redis key expiry across time.
    */
   private resolvePhysicalTtl(ttl: number, staleTtl: number): number {
     const physicalTtl = ttl + staleTtl;
@@ -394,9 +359,6 @@ export class CacheOperations {
     return Math.round(physicalTtl + jitter);
   }
 
-  /**
-   * 지수 백오프(Exponential Backoff)와 지터(Jitter)를 적용한 대기 함수
-   */
   private async delayWithExponentialBackoff(attempt: number): Promise<void> {
     const { baseDelayMs, jitterMs, maxDelayMs } = DEFAULT_CONFIG.swr;
 
@@ -407,9 +369,6 @@ export class CacheOperations {
     await sleep(delay);
   }
 
-  /**
-   * 캐시를 조회합니다
-   */
   private async getCacheEnvelope(
     key: string,
     cacheProvider: CacheProvider,
@@ -422,14 +381,11 @@ export class CacheOperations {
     }
   }
 
-  /**
-   * 분산 락을 안전하게 해제합니다
-   */
   private async releaseLock(cacheProvider: CacheProvider, lockKey: string): Promise<void> {
     try {
       await cacheProvider.unlock(lockKey);
     } catch (error) {
-      this.logger.warn(`락 해제 실패 (키: ${lockKey})`, error);
+      this.logger.warn(`Failed to release lock (key: ${lockKey})`, error);
     }
   }
 }

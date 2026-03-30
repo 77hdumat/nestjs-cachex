@@ -1,6 +1,6 @@
 {
   "name": "nestjs-cachex",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "NestJS decorator-based caching module with SWR, Single-flight, msgpack, zstd, and multi-level cache",
   "main": "dist/cachex/index.js",
   "types": "dist/cachex/index.d.ts",

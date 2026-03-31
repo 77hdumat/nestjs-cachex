@@ -1,4 +1,4 @@
-[English](./README.md) | [한국어](./README.ko.md) | **日本語**
+[English](https://github.com/77hdumat/nestjs-cachex/blob/main/README.md) | [한국어](https://github.com/77hdumat/nestjs-cachex/blob/main/README.ko.md) | **日本語**
 
 # nestjs-cachex
 
@@ -83,12 +83,18 @@ export class UserService {
 npm install nestjs-cachex
 # または
 yarn add nestjs-cachex
+# または
+pnpm add nestjs-cachex
 ```
 
 Redisを使用する場合はioredisも合わせてインストールします。
 
 ```bash
 npm install ioredis
+# または
+yarn add ioredis
+# または
+pnpm add ioredis
 ```
 
 ---
